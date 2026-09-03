@@ -284,4 +284,43 @@ final class LiveTranscriptionSessionTests: XCTestCase {
             return XCTFail("whitespace-only text must not be inserted, got \(outcome)")
         }
     }
+
+    // MARK: - Leaving early
+
+    /// Esc during finalization cancels the task awaiting finish(). The wait must
+    /// end right there: `try?` swallows the cancellation and a sleep that returns
+    /// at once turns the loop into a hot spin for the rest of the deadline.
+    func testFinishLeavesPromptlyWhenTheTaskIsCancelled() async throws {
+        let transport = FakeTransport(script: [setupCompleteFrame()]) // no final, ever
+        let session = makeSession(transport)
+        try await session.start()
+        let started = Date()
+        let finishing = Task { await session.finish(deadline: 5.0) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        finishing.cancel()
+        let outcome = await finishing.value
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1.0,
+                          "a cancelled finish must not run to the deadline")
+        guard case .unusable = outcome else {
+            return XCTFail("a cancelled wait must not produce a transcript, got \(outcome)")
+        }
+    }
+
+    /// The coordinator aborts the session when it tears down. A finish() still
+    /// waiting must notice, not sit out its deadline on a closed socket.
+    func testFinishLeavesPromptlyAfterAbort() async throws {
+        let transport = FakeTransport(script: [setupCompleteFrame()])
+        let session = makeSession(transport)
+        try await session.start()
+        let started = Date()
+        let finishing = Task { await session.finish(deadline: 5.0) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        await session.abort()
+        let outcome = await finishing.value
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1.0,
+                          "an aborted finish must not run to the deadline")
+        guard case .unusable = outcome else {
+            return XCTFail("an aborted wait must not produce a transcript, got \(outcome)")
+        }
+    }
 }

@@ -57,13 +57,15 @@ final class DictationController {
         guard settings.liveTranscriptionActive else { return nil }
         // A live path that is reliably broken is worse than one that is off: every
         // attempt costs a handshake and then the full upload anyway, so the user
-        // pays latency on every dictation for a feature that never delivers. Stop
-        // trying after a run of failures; a single success clears the streak, so a
-        // bad hotel wifi heals itself without anyone touching a setting.
+        // pays latency on every dictation for a feature that never delivers. Pause
+        // after a run of failures — a pause, because a path that is never tried
+        // can never succeed, and "wait for a success to clear the streak" once
+        // left live switched off for a whole day after one wifi drop.
         let stats = LiveStats()
         if stats.shouldStopTrying {
+            let until = stats.pausedUntil?.formatted(date: .omitted, time: .shortened) ?? "?"
             Log.transcription.info(
-                "live disabled for now after \(stats.consecutiveFailures) consecutive failures — uploading instead"
+                "live paused after \(stats.consecutiveFailures) consecutive failures — uploading instead until \(until, privacy: .public)"
             )
             return nil
         }

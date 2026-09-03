@@ -48,6 +48,7 @@ public struct LiveStats: Sendable {
     private static let successesKey = "liveSuccesses"
     private static let reasonPrefix = "liveFallback_"
     private static let consecutiveKey = "liveConsecutiveFailures"
+    private static let pausedUntilKey = "livePausedUntil"
 
     private let defaults: UserDefaults
     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
@@ -56,13 +57,18 @@ public struct LiveStats: Sendable {
         defaults.set(defaults.integer(forKey: Self.attemptsKey) + 1, forKey: Self.attemptsKey)
         defaults.set(defaults.integer(forKey: Self.successesKey) + 1, forKey: Self.successesKey)
         defaults.set(0, forKey: Self.consecutiveKey)
+        defaults.removeObject(forKey: Self.pausedUntilKey)
     }
 
-    public func recordFallback(_ reason: Fallback) {
+    public func recordFallback(_ reason: Fallback, now: Date = Date()) {
         defaults.set(defaults.integer(forKey: Self.attemptsKey) + 1, forKey: Self.attemptsKey)
         let key = Self.reasonPrefix + reason.rawValue
         defaults.set(defaults.integer(forKey: key) + 1, forKey: key)
-        defaults.set(defaults.integer(forKey: Self.consecutiveKey) + 1, forKey: Self.consecutiveKey)
+        let streak = defaults.integer(forKey: Self.consecutiveKey) + 1
+        defaults.set(streak, forKey: Self.consecutiveKey)
+        if streak >= Self.failureLimit {
+            defaults.set(now.addingTimeInterval(Self.pauseSeconds), forKey: Self.pausedUntilKey)
+        }
     }
 
     public var attempts: Int { defaults.integer(forKey: Self.attemptsKey) }
@@ -73,27 +79,51 @@ public struct LiveStats: Sendable {
         defaults.integer(forKey: Self.reasonPrefix + reason.rawValue)
     }
 
-    /// Stop opening sockets after this many failures in a row.
+    /// Stop opening sockets after this many failures in a row — for a while.
     ///
     /// Every failed attempt costs a handshake and then the full upload anyway, so
     /// a live path that is reliably broken makes every dictation slower than
     /// having the feature off. Three is enough to distinguish a bad afternoon
-    /// from a bad build. A single success clears it, so a flaky network heals
-    /// itself without the user touching anything.
+    /// from a bad build.
+    ///
+    /// The stop is a PAUSE, not a latch. The first version stopped for good and
+    /// counted on "a single success clears it" to heal — but a path that is never
+    /// tried can never succeed, so one wifi drop three dictations long switched
+    /// live off until the user happened to flip the toggle. That is exactly what
+    /// happened on 2026-09-02: the streak hit three during a network loss at
+    /// 15:50, and every dictation for the rest of the day uploaded, with the
+    /// only sign being that the pill had gone quiet. Now attempts resume after
+    /// `pauseSeconds`; if they fail again the streak keeps counting and the pause
+    /// restarts, and a single success still clears everything.
     public static let failureLimit = 3
+    /// Long enough that a dead hotel wifi is not probed every dictation; short
+    /// enough that a fixed one is noticed within the same sitting.
+    public static let pauseSeconds: TimeInterval = 10 * 60
 
-    public var shouldStopTrying: Bool { consecutiveFailures >= Self.failureLimit }
+    public var shouldStopTrying: Bool { isPaused(now: Date()) }
+
+    /// Injectable clock so the pause is testable without waiting ten minutes.
+    public func isPaused(now: Date) -> Bool {
+        guard let until = defaults.object(forKey: Self.pausedUntilKey) as? Date else { return false }
+        return now < until
+    }
+
+    public var pausedUntil: Date? {
+        defaults.object(forKey: Self.pausedUntilKey) as? Date
+    }
 
     /// Clears the streak without clearing the history — used when the user turns
     /// live mode on again, which is an explicit "try once more".
     public func clearStreak() {
         defaults.set(0, forKey: Self.consecutiveKey)
+        defaults.removeObject(forKey: Self.pausedUntilKey)
     }
 
     public func reset() {
         defaults.removeObject(forKey: Self.attemptsKey)
         defaults.removeObject(forKey: Self.successesKey)
         defaults.removeObject(forKey: Self.consecutiveKey)
+        defaults.removeObject(forKey: Self.pausedUntilKey)
         for reason in Fallback.allCases {
             defaults.removeObject(forKey: Self.reasonPrefix + reason.rawValue)
         }

@@ -55,6 +55,43 @@ final class LiveStatsTests: XCTestCase {
         stats.recordSuccess()
         XCTAssertFalse(stats.shouldStopTrying, "live must recover without the user touching a setting")
         XCTAssertEqual(stats.consecutiveFailures, 0)
+        XCTAssertNil(stats.pausedUntil)
+    }
+
+    /// THE bug this guards against: a path that is never tried can never
+    /// succeed, so a permanent stop could only ever be undone by hand. The stop
+    /// must expire on its own, and then live gets tried again.
+    func testThePauseExpiresOnItsOwn() {
+        let dropped = Date(timeIntervalSince1970: 1_000_000)
+        for _ in 0..<3 { stats.recordFallback(.neverOpened, now: dropped) }
+        XCTAssertTrue(stats.isPaused(now: dropped))
+        XCTAssertTrue(stats.isPaused(now: dropped.addingTimeInterval(LiveStats.pauseSeconds - 1)),
+                      "still paused a second before the pause ends")
+        XCTAssertFalse(stats.isPaused(now: dropped.addingTimeInterval(LiveStats.pauseSeconds + 1)),
+                       "the pause must lift by itself — nobody is coming to flip the toggle")
+        XCTAssertEqual(stats.consecutiveFailures, 3, "the streak is evidence and survives the pause")
+    }
+
+    /// If the retry after the pause fails too, the pause restarts from that
+    /// failure — a dead network is probed once per pause, not once per dictation.
+    func testAFailureAfterThePauseRestartsIt() {
+        let dropped = Date(timeIntervalSince1970: 1_000_000)
+        for _ in 0..<3 { stats.recordFallback(.neverOpened, now: dropped) }
+        let retried = dropped.addingTimeInterval(LiveStats.pauseSeconds + 60)
+        XCTAssertFalse(stats.isPaused(now: retried))
+        stats.recordFallback(.neverOpened, now: retried)
+        XCTAssertTrue(stats.isPaused(now: retried.addingTimeInterval(60)))
+        XCTAssertFalse(stats.isPaused(now: retried.addingTimeInterval(LiveStats.pauseSeconds + 1)))
+        XCTAssertEqual(stats.consecutiveFailures, 4)
+    }
+
+    /// Two failures are a bad moment; they must not start a pause either.
+    func testTwoFailuresDoNotPause() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        stats.recordFallback(.noFinal, now: now)
+        stats.recordFallback(.noFinal, now: now)
+        XCTAssertNil(stats.pausedUntil)
+        XCTAssertFalse(stats.isPaused(now: now))
     }
 
     /// Re-enabling the toggle is an explicit "try again", but must not erase the
@@ -63,6 +100,7 @@ final class LiveStatsTests: XCTestCase {
         for _ in 0..<4 { stats.recordFallback(.truncated) }
         stats.clearStreak()
         XCTAssertFalse(stats.shouldStopTrying)
+        XCTAssertNil(stats.pausedUntil, "turning live on again lifts the pause too")
         XCTAssertEqual(stats.attempts, 4, "history survives")
         XCTAssertEqual(stats.count(of: .truncated), 4)
     }

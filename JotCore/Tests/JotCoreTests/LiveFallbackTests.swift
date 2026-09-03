@@ -157,4 +157,24 @@ final class LiveFallbackTests: XCTestCase {
         let result = await transcriber.finish(deadline: 0.3, framesWritten: 800)
         XCTAssertNil(result)
     }
+
+    /// An Esc mid-finalization is the user's decision, not evidence against live
+    /// mode. It must not count as a fallback, or three Escs would pause the
+    /// feature and the footer would blame the network.
+    func testCancelledFinishIsNotCountedAsAFallback() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "live-fallback-tests-\(UUID().uuidString)"))
+        let stats = LiveStats(defaults: defaults)
+        let transport = LiveTranscriptionSessionTests.FakeTransport(
+            script: [frame(["setupComplete": [:] as [String: Any]])] // no final, ever
+        )
+        let session = LiveTranscriptionSession(transport: transport, setup: LiveSetup(), ring: PCMRing())
+        let transcriber = LiveTranscriber(session: session, modelID: "test-live", replacementRules: { [] }, stats: stats)
+        try await transcriber.begin()
+        let finishing = Task { await transcriber.finish(deadline: 5.0, framesWritten: 0) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        finishing.cancel()
+        let result = await finishing.value
+        XCTAssertNil(result)
+        XCTAssertEqual(stats.attempts, 0, "a cancelled dictation must not count against live mode")
+    }
 }

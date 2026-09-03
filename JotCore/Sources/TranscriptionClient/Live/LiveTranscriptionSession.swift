@@ -223,22 +223,33 @@ public actor LiveTranscriptionSession {
         commandSink.yield(.endActivity)
         commandSink.finish()
 
+        // Both waits below must also leave on cancellation and on abort. `try?`
+        // swallows CancellationError, and once the task is cancelled every
+        // Task.sleep returns at once — so without `!Task.isCancelled` an Esc
+        // during finalization (the coordinator cancels the task awaiting this)
+        // turned the wait into a hot spin for the rest of the deadline, close to
+        // a full core for six seconds. `!closed` covers the other exit: the
+        // coordinator's abort() when it tears the session down.
+
         // Wait for the send loop to actually flush activityEnd before starting
         // the clock on the final transcript.
         let flushDeadline = Date().addingTimeInterval(2.0)
-        while !activityEndFlushed, failure == nil, Date() < flushDeadline {
+        while !activityEndFlushed, failure == nil, !closed, !Task.isCancelled, Date() < flushDeadline {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
+        if closed || Task.isCancelled { close(); return .unusable("cancelled") }
         if let failure { close(); return .unusable(failure) }
         guard activityEndFlushed else { close(); return .unusable("activityEnd never flushed") }
 
         // A final may already have arrived. Otherwise wait, briefly.
         let finalDeadline = Date().addingTimeInterval(deadline)
-        while finals.isEmpty, failure == nil, Date() < finalDeadline {
+        while finals.isEmpty, failure == nil, !closed, !Task.isCancelled, Date() < finalDeadline {
             try? await Task.sleep(nanoseconds: 30_000_000)
         }
+        let cancelled = closed || Task.isCancelled
         close()
 
+        if cancelled { return .unusable("cancelled") }
         if let failure { return .unusable(failure) }
         guard !finals.isEmpty else { return .unusable("no final transcript before deadline") }
         if ring.didDrop { return .unusable("dropped \(ring.droppedChunks) chunks — stream is truncated") }

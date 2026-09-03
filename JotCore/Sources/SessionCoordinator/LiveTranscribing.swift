@@ -97,6 +97,10 @@ public final class LiveTranscriber: LiveTranscribing, @unchecked Sendable {
         let outcome = await session.finish(deadline: deadline)
         guard case .completed(let text) = outcome else {
             if case .unusable(let why) = outcome {
+                // An Esc mid-finalization is the user's decision, not evidence
+                // against live mode: counting it would blame the network in the
+                // Settings footer and walk the streak towards a pause.
+                guard !Task.isCancelled else { return nil }
                 Log.transcription.info("live session unusable, falling back to upload: \(why, privacy: .public)")
                 stats.recordFallback(LiveStats.classify(why))
             }
