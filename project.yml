@@ -30,12 +30,17 @@ targets:
     platform: macOS
     settings:
       base:
-        PRODUCT_NAME: Jot
-        PRODUCT_BUNDLE_IDENTIFIER: com.ammaar.jot
-        # The three settings a side-by-side "Jot Dev" build overrides on the
-        # xcodebuild command line (see JotCore/Sources/Support/AppFlavor.swift):
-        #   PRODUCT_NAME="Jot Dev" PRODUCT_BUNDLE_IDENTIFIER=com.ammaar.jot.dev JOT_URL_SCHEME=jotdev
+        # Identity goes through JOT_* variables so a side-by-side "Jot Dev"
+        # build can override it on the xcodebuild command line:
+        #   JOT_PRODUCT_NAME="Jot Dev" JOT_BUNDLE_ID=com.ammaar.jot.dev JOT_URL_SCHEME=jotdev
+        # Overriding PRODUCT_NAME itself there would apply to EVERY target in
+        # the build, the Swift packages included, and break them; only this
+        # target reads the JOT_* names. See JotCore/Sources/Support/AppFlavor.swift.
+        JOT_PRODUCT_NAME: Jot
+        JOT_BUNDLE_ID: com.ammaar.jot
         JOT_URL_SCHEME: jot
+        PRODUCT_NAME: $(JOT_PRODUCT_NAME)
+        PRODUCT_BUNDLE_IDENTIFIER: $(JOT_BUNDLE_ID)
         # Ammaar's PERSONAL Apple team. A personal open-source project must not
         # be signed under Google LLC's team, in development or in distribution.
         DEVELOPMENT_TEAM: 7S264298H8

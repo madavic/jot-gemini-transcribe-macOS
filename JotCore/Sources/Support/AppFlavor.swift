@@ -18,8 +18,8 @@ import Foundation
 ///
 /// One codebase, two apps that can sit side by side in /Applications: the real
 /// `Jot` (bundle `com.ammaar.jot`) and a development build, `Jot Dev`
-/// (`com.ammaar.jot.dev`), produced by passing `PRODUCT_NAME` and
-/// `PRODUCT_BUNDLE_IDENTIFIER` to xcodebuild. The bundle identifier is the only
+/// (`com.ammaar.jot.dev`), produced by passing `JOT_PRODUCT_NAME` and
+/// `JOT_BUNDLE_ID` to xcodebuild (see project.yml). The bundle identifier is the only
 /// input; everything that persists is keyed off it here, in one place, so the
 /// two apps never touch each other's state:
 ///
