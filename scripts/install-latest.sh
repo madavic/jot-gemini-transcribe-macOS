@@ -96,5 +96,11 @@ open -a "$APP"
 
 version=$(defaults read "$APP/Contents/Info.plist" CFBundleShortVersionString)
 build=$(defaults read "$APP/Contents/Info.plist" CFBundleVersion)
-authority=$(codesign -dv --verbose=2 "$APP" 2>&1 | grep -m1 '^Authority=' | cut -d= -f2-)
+# No pipe here: `grep -m1` closing the pipe early gave codesign a SIGPIPE,
+# and under pipefail that failed the whole script after a successful install.
+signature=$(codesign -dv --verbose=2 "$APP" 2>&1 || true)
+authority="unknown"
+while IFS= read -r line; do
+  case "$line" in Authority=*) authority=${line#Authority=}; break ;; esac
+done <<<"$signature"
 echo "✓ Jot $version ($build) installed, signed by $authority${WANT:+, built from main@${WANT:0:7}}"
