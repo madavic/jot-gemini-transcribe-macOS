@@ -64,7 +64,9 @@ if [ -n "$WANT" ]; then
       echo "  CI succeeded: $url"
       break
     fi
-    echo "  $status…"
+    # Braces on purpose: macOS ships bash 3.2, which read the first byte of the
+    # multibyte "…" as part of the variable name and died on `set -u`.
+    echo "  ${status}…"
     sleep 10
   done
   target=$(curl -fsS "$API/releases/tags/latest" | jq -r '.target_commitish // ""')
