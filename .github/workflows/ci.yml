@@ -77,7 +77,9 @@ jobs:
       # an unsigned, unnotarized Debug build and must never be handed to
       # anyone as a release.
       - name: Publish rolling build
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        # Also on a manual run of main, so the first run after enabling
+        # Actions on a fork publishes without needing another commit.
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
