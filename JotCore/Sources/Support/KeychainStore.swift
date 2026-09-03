@@ -21,7 +21,9 @@ import Security
 /// lack it (errSecMissingEntitlement, -34018). Never UserDefaults/JSON
 /// (Superwhisper's documented failure).
 public enum KeychainStore {
-    private static let service = "com.ammaar.jot"
+    /// Per flavor: the dev build must own its own item, or every read of the
+    /// release app's item under a different signature is a permission dialog.
+    private static var service: String { AppFlavor.keychainService }
     private static let account = "gemini-api-key"
 
     private static func baseQuery(dataProtection: Bool) -> [String: Any] {
@@ -55,7 +57,7 @@ public enum KeychainStore {
         deleteAPIKey()
         for dataProtection in [true, false] {
             var attributes = baseQuery(dataProtection: dataProtection)
-            attributes[kSecAttrLabel as String] = "Jot — Gemini API key"
+            attributes[kSecAttrLabel as String] = "\(AppFlavor.displayName) — Gemini API key"
             attributes[kSecValueData as String] = Data(key.utf8)
             if dataProtection {
                 attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly

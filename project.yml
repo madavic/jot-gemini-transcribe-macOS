@@ -32,6 +32,10 @@ targets:
       base:
         PRODUCT_NAME: Jot
         PRODUCT_BUNDLE_IDENTIFIER: com.ammaar.jot
+        # The three settings a side-by-side "Jot Dev" build overrides on the
+        # xcodebuild command line (see JotCore/Sources/Support/AppFlavor.swift):
+        #   PRODUCT_NAME="Jot Dev" PRODUCT_BUNDLE_IDENTIFIER=com.ammaar.jot.dev JOT_URL_SCHEME=jotdev
+        JOT_URL_SCHEME: jot
         # Ammaar's PERSONAL Apple team. A personal open-source project must not
         # be signed under Google LLC's team, in development or in distribution.
         DEVELOPMENT_TEAM: 7S264298H8
@@ -70,7 +74,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Jot
+        CFBundleDisplayName: $(PRODUCT_NAME)
         CFBundleIconFile: Jot
         # Without these the generated plist keeps xcodegen's default 1.0, so the
         # About panel and the DMG filename disagree about the version.
@@ -82,8 +86,8 @@ targets:
         NSHumanReadableCopyright: "Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product."
         LSMinimumSystemVersion: "14.0"
         CFBundleURLTypes:
-          - CFBundleURLName: com.ammaar.jot.url
-            CFBundleURLSchemes: [jot]
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER).url
+            CFBundleURLSchemes: [$(JOT_URL_SCHEME)]
     scheme:
       testTargets: []
       gatherCoverageData: false

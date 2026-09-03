@@ -45,7 +45,10 @@ jobs:
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
-      - name: Build (unsigned)
+      # The "Jot Dev" flavor (see JotCore/Sources/Support/AppFlavor.swift): its
+      # own bundle identifier, so it installs NEXT TO the real Jot with its own
+      # Keychain item, Application Support folder, defaults and TCC grants.
+      - name: Build Jot Dev (unsigned)
         run: |
           # pipefail, or a failed xcodebuild hides behind tail's exit code and
           # the step goes green with no app to package.
@@ -56,6 +59,7 @@ jobs:
             -configuration Debug \
             -destination 'platform=macOS' \
             -derivedDataPath build/ci \
+            PRODUCT_NAME="Jot Dev" PRODUCT_BUNDLE_IDENTIFIER=com.ammaar.jot.dev JOT_URL_SCHEME=jotdev \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= \
             | tail -20
       # The build is kept, so a Mac without Xcode can still run the latest
@@ -63,15 +67,15 @@ jobs:
       # signature changes every build, and TCC would ask for Accessibility
       # again each time), copy to /Applications.
       - name: Package
-        run: ditto -c -k --keepParent build/ci/Build/Products/Debug/Jot.app Jot-latest.zip
+        run: ditto -c -k --keepParent "build/ci/Build/Products/Debug/Jot Dev.app" Jot-Dev-latest.zip
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: Jot-${{ github.sha }}
-          path: Jot-latest.zip
+          name: Jot-Dev-${{ github.sha }}
+          path: Jot-Dev-latest.zip
           retention-days: 30
       # One stable URL for the newest build of main, no login needed:
-      #   https://github.com/<owner>/<repo>/releases/download/latest/Jot-latest.zip
+      #   https://github.com/<owner>/<repo>/releases/download/latest/Jot-Dev-latest.zip
       # The release is deleted and recreated so the tag moves to this commit
       # and exactly one zip is attached. This is a fork-only convenience: it is
       # an unsigned, unnotarized Debug build and must never be handed to
@@ -84,9 +88,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
-          gh release create latest Jot-latest.zip \
+          gh release create latest Jot-Dev-latest.zip \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --prerelease \
-            --title "Latest build of main (${GITHUB_SHA::7})" \
-            --notes "Unsigned Debug build of main@${GITHUB_SHA}. For the fork owner's own Mac only — not a release."
+            --title "Latest Jot Dev build of main (${GITHUB_SHA::7})" \
+            --notes "Unsigned Debug build of the Jot Dev flavor, main@${GITHUB_SHA}. For the fork owner's own Mac only — not a release."

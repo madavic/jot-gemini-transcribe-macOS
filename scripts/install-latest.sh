@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Installs the newest build of the fork's `main` on this Mac.
+# Installs the newest "Jot Dev" build of the fork's `main` on this Mac, next to
+# the real Jot.
 #
 #   scripts/install-latest.sh [commit]
 #
@@ -21,6 +22,11 @@
 # to succeed and checks that the `latest` pre-release was cut from it, so a
 # stale zip is never installed as if it were the new one. Without a commit,
 # installs whatever `latest` currently is.
+#
+# Jot Dev is its own app (bundle com.ammaar.jot.dev, see AppFlavor.swift): its
+# own Keychain item, Application Support folder, defaults and permissions.
+# This script never touches /Applications/Jot.app. It does quit a running Jot
+# before launching Jot Dev, because both listen to the same dictation key.
 #
 # The build CI publishes is ad-hoc signed, and an ad-hoc signature changes with
 # every build — macOS keys the Accessibility and Microphone grants to the
@@ -38,8 +44,9 @@ REPO="${JOT_FORK:-madavic/jot-gemini-transcribe-macOS}"
 IDENTITY="${JOT_SIGN_IDENTITY:-Jot Dev}"
 WANT="${1:-}"
 API="https://api.github.com/repos/$REPO"
-ZIP_URL="https://github.com/$REPO/releases/download/latest/Jot-latest.zip"
-APP=/Applications/Jot.app
+ZIP_URL="https://github.com/$REPO/releases/download/latest/Jot-Dev-latest.zip"
+APP="/Applications/Jot Dev.app"
+BUNDLE_ID="com.ammaar.jot.dev"
 
 for tool in curl jq codesign ditto xattr; do
   command -v "$tool" >/dev/null || { echo "✗ $tool is required" >&2; exit 1; }
@@ -79,19 +86,27 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 echo "▸ Downloading $ZIP_URL"
-curl -fL --progress-bar -o "$TMP/Jot-latest.zip" "$ZIP_URL"
-ditto -x -k "$TMP/Jot-latest.zip" "$TMP"
-[ -d "$TMP/Jot.app" ] || { echo "✗ the zip did not contain Jot.app" >&2; exit 1; }
+curl -fL --progress-bar -o "$TMP/Jot-Dev-latest.zip" "$ZIP_URL"
+ditto -x -k "$TMP/Jot-Dev-latest.zip" "$TMP"
+[ -d "$TMP/Jot Dev.app" ] || { echo "✗ the zip did not contain Jot Dev.app" >&2; exit 1; }
+# Never let a zip built with the release identifiers land here: that app would
+# share the real Jot's Keychain item and data, which is the whole thing this
+# flavor exists to avoid.
+built_id=$(defaults read "$TMP/Jot Dev.app/Contents/Info.plist" CFBundleIdentifier)
+[ "$built_id" = "$BUNDLE_ID" ] || { echo "✗ the build identifies as $built_id, expected $BUNDLE_ID — not installing" >&2; exit 1; }
 
 echo "▸ Re-signing with \"$IDENTITY\""
-codesign --force --deep --sign "$IDENTITY" --entitlements App/Jot.entitlements "$TMP/Jot.app"
-xattr -dr com.apple.quarantine "$TMP/Jot.app" 2>/dev/null || true
+codesign --force --deep --sign "$IDENTITY" --entitlements App/Jot.entitlements "$TMP/Jot Dev.app"
+xattr -dr com.apple.quarantine "$TMP/Jot Dev.app" 2>/dev/null || true
 
 echo "▸ Installing to $APP"
+# Both apps grab the dictation key; only one may run. The real Jot stays
+# installed and is one click away in Launchpad when it is wanted back.
+osascript -e 'tell application "Jot Dev" to quit' >/dev/null 2>&1 || true
 osascript -e 'tell application "Jot" to quit' >/dev/null 2>&1 || true
 sleep 1
 rm -rf "$APP"
-ditto "$TMP/Jot.app" "$APP"
+ditto "$TMP/Jot Dev.app" "$APP"
 open -a "$APP"
 
 version=$(defaults read "$APP/Contents/Info.plist" CFBundleShortVersionString)
@@ -103,4 +118,4 @@ authority="unknown"
 while IFS= read -r line; do
   case "$line" in Authority=*) authority=${line#Authority=}; break ;; esac
 done <<<"$signature"
-echo "✓ Jot $version ($build) installed, signed by $authority${WANT:+, built from main@${WANT:0:7}}"
+echo "✓ Jot Dev $version ($build) installed, signed by $authority${WANT:+, built from main@${WANT:0:7}}"

@@ -14,9 +14,10 @@
 
 import os
 
-/// Central loggers, one per subsystem area. Subsystem matches the app bundle id.
+/// Central loggers, one per subsystem area. Subsystem matches the app bundle id
+/// (so a `Jot Dev` build logs under `com.ammaar.jot.dev`).
 public enum Log {
-    public static let subsystem = "com.ammaar.jot"
+    public static let subsystem = AppFlavor.bundleID
 
     public static let session = Logger(subsystem: subsystem, category: "session")
     public static let hotkey = Logger(subsystem: subsystem, category: "hotkey")

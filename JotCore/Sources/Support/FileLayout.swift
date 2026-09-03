@@ -23,8 +23,10 @@ public enum FileLayout {
 
     public static var appSupportRoot: URL {
         if let overrideRoot { return overrideRoot }
+        // Per flavor ("Jot" / "Jot Dev"): two apps over one recordings folder
+        // and one SQLite store would race the recovery scanner and retention.
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Jot", isDirectory: true)
+            .appendingPathComponent(AppFlavor.supportDirectoryName, isDirectory: true)
     }
 
     public static var recordingsRoot: URL {

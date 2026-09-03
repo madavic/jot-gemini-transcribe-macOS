@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Jot</string>
+	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
@@ -24,10 +24,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.ammaar.jot.url</string>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).url</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>jot</string>
+				<string>$(JOT_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
