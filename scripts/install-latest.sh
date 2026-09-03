@@ -30,12 +30,12 @@
 # for the machine it is installed on, never something to hand to anyone.
 #
 #   JOT_FORK           owner/repo of the fork      (default madavic/jot-gemini-transcribe-macOS)
-#   JOT_SIGN_IDENTITY  codesigning identity name   (default "Masko Code Dev")
+#   JOT_SIGN_IDENTITY  codesigning identity name   (default "Jot Dev")
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 REPO="${JOT_FORK:-madavic/jot-gemini-transcribe-macOS}"
-IDENTITY="${JOT_SIGN_IDENTITY:-Masko Code Dev}"
+IDENTITY="${JOT_SIGN_IDENTITY:-Jot Dev}"
 WANT="${1:-}"
 API="https://api.github.com/repos/$REPO"
 ZIP_URL="https://github.com/$REPO/releases/download/latest/Jot-latest.zip"
