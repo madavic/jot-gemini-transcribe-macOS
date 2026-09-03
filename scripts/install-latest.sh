@@ -54,33 +54,43 @@ done
 security find-identity -v -p codesigning | grep -q "\"$IDENTITY\"" \
   || { echo "✗ no codesigning identity named \"$IDENTITY\" in the keychain (security find-identity -v -p codesigning)" >&2; exit 1; }
 
+# Unauthenticated, the GitHub API allows 60 requests an hour per address. The
+# release PAGE on github.com is not metered, and its title carries the short
+# SHA the build was cut from, so that is what the wait watches. The API is
+# consulted only once, at the end, to tell a failed run from a slow one.
+release_sha() {
+  curl -fsSL "https://github.com/$REPO/releases/tag/latest" \
+    | sed -n 's/.*Latest Jot Dev build of main (\([0-9a-f]*\)).*/\1/p' | head -1
+}
+
 if [ -n "$WANT" ]; then
   echo "▸ Waiting for CI on main@${WANT:0:7}"
-  for _ in $(seq 1 90); do # up to 15 minutes
-    line=$(curl -fsS "$API/actions/runs?branch=main&per_page=10" \
-      | jq -r --arg sha "$WANT" '.workflow_runs[] | select(.name == "CI") | select(.head_sha | startswith($sha)) | "\(.status) \(.conclusion) \(.html_url)"' \
-      | head -1)
-    if [ -z "$line" ]; then
-      echo "  no run for that commit yet — are Actions enabled on https://github.com/$REPO/actions ?"
-      sleep 10
-      continue
+  ready=""
+  tick=0
+  while [ "$tick" -lt 60 ]; do # up to 30 minutes
+    current=$(release_sha || true)
+    if [ -n "$current" ]; then
+      # Either may be the shorter spelling of the same commit.
+      case "$WANT" in "$current"*) ready=1 ;; esac
+      case "$current" in "$WANT"*) ready=1 ;; esac
+      [ -n "$ready" ] && break
     fi
-    read -r status conclusion url <<<"$line"
-    if [ "$status" = completed ]; then
-      [ "$conclusion" = success ] || { echo "✗ CI $conclusion: $url" >&2; exit 1; }
-      echo "  CI succeeded: $url"
-      break
+    # Every two minutes, one metered API call: has the run already failed?
+    # Without this a red build would only surface as a 30-minute timeout.
+    if [ $((tick % 4)) -eq 0 ]; then
+      verdict=$(curl -fsS "$API/actions/runs?branch=main&per_page=5" 2>/dev/null \
+        | jq -r --arg sha "$WANT" '.workflow_runs[] | select(.name == "CI") | select(.head_sha | startswith($sha)) | "\(.status) \(.conclusion) \(.html_url)"' \
+        | head -1 || true)
+      case "$verdict" in
+        "completed failure"*|"completed cancelled"*) echo "✗ CI ${verdict#completed }" >&2; exit 1 ;;
+      esac
     fi
-    # Braces on purpose: macOS ships bash 3.2, which read the first byte of the
-    # multibyte "…" as part of the variable name and died on `set -u`.
-    echo "  ${status}…"
-    sleep 10
+    echo "  waiting (latest release is ${current:-none}, want ${WANT:0:7})…"
+    sleep 30
+    tick=$((tick + 1))
   done
-  target=$(curl -fsS "$API/releases/tags/latest" | jq -r '.target_commitish // ""')
-  case "$target" in
-    "$WANT"*) ;;
-    *) echo "✗ the latest release was cut from ${target:0:7}, not ${WANT:0:7} — not installing" >&2; exit 1 ;;
-  esac
+  [ -n "$ready" ] || { echo "✗ no build of ${WANT:0:7} after 30 minutes — check https://github.com/$REPO/actions" >&2; exit 1; }
+  echo "  build of ${WANT:0:7} is published"
 fi
 
 TMP=$(mktemp -d)
